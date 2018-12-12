@@ -59,7 +59,10 @@
 //! </table>
 //!
 //! [Agner’s instruction tables]: http://agner.org/optimize/
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "std")]
+extern crate core;
 
 extern crate rand_core;
 
@@ -135,6 +138,7 @@ mod arch {
     }
 }
 
+#[cfg(not(feature = "std"))]
 macro_rules! check_cpuid {
     ("rdrand") => { {
         const FLAG : u32 = 1 << 30;
@@ -144,6 +148,11 @@ macro_rules! check_cpuid {
         const FLAG : u32 = 1 << 18;
         ::arch::__cpuid(7).ebx & FLAG == FLAG
     } };
+}
+
+#[cfg(not(feature = "std"))]
+macro_rules! is_x86_feature_detected {
+    ($feat:tt) => { cfg!(target_feature=$feat) || unsafe { check_cpuid!($feat) }};
 }
 
 macro_rules! loop_rand {
@@ -171,13 +180,11 @@ macro_rules! impl_rand {
             /// instruction necessary for this generator to operate. If the instruction is not
             /// supported, an error is returned.
             pub fn new() -> Result<Self, Error> {
-                unsafe {
-                    if cfg!(target_feature=$feat) || check_cpuid!($feat) {
-                        Ok($gen(()))
-                    } else {
-                        Err(Error::new(rand_core::ErrorKind::Unavailable,
-                                       "the instruction is not supported"))
-                    }
+                if is_x86_feature_detected!($feat) {
+                    Ok($gen(()))
+                } else {
+                    Err(Error::new(rand_core::ErrorKind::Unavailable,
+                                   "the instruction is not supported"))
                 }
             }
 
